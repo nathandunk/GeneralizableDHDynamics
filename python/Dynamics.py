@@ -43,11 +43,11 @@ def dynamics_newtonian(m,Pc,Ic,Ti,Qd,Qdd,g0):
     Ic = list(Ic)
     Ic.insert(0,0)
     Qd = list(Qd)
-    Qd.insert(0,0) # COLUMN
+    Qd.insert(0,0)
     Qdd = list(Qdd)
-    Qdd.insert(0,0) # COLUMN
+    Qdd.insert(0,0)
 
-    Z = np.array([[0, 0, 1]]).T # COLUMN
+    Z = np.array([[0, 0, 1.0]]).T
 
     w = [np.array([[0, 0, 0]]).T] * (num+1)
     wd = [np.array([[0, 0, 0]]).T] * (num+1)
@@ -56,47 +56,45 @@ def dynamics_newtonian(m,Pc,Ic,Ti,Qd,Qdd,g0):
     F = [np.array([[0, 0, 0]]).T] * (num+1)
     N = [np.array([[0, 0, 0]]).T] * (num+1)
 
+    f = [np.array([[0, 0, 0]]).T] * (num+1)
+    n = [np.array([[0, 0, 0]]).T] * (num+1)
+    
+    Tau = [0] * (num+1)
+
     G = -g0
-    vd.append(G)
+    vd[0] = G
 
     for i in range(0,num):
-        R        = Ti[i,0:3,0:3].T                                                                         # ^i+1_i R
-        P        = Ti[i,0:3,3]                                                                             # ^i P_i+1
-        w[i+1] = R.dot(w[i]) + Z * Qd[i+1]                                                                # 6.45
-        wd[i+1] = R.dot(wd[i]) + np.cross(R.dot(w[i]),Z * Qd[i+1],axis=0) + Z * Qdd[i+1]                  # 6.46
-        vd[i+1] = R.dot(np.cross(wd[i],P,axis=0) + np.cross(w[i],np.cross(w[i],P,axis=0),axis=0) + vd[i]) # 6.47
-        vcd[i+1] = np.cross(wd[i+1],np.array(Pc[i+1]).T,axis=0) + np.cross(w[i+1],np.cross(w[i+1],np.array(Pc[i+1]).T,axis=0),axis=0) + vd[i+1]    # 6.48
-        F[i+1] = m[i+1]*vcd[i+1]                                                                          # 6.49
-        N[i+1] = Ic[i+1].dot(wd[i+1]) + np.cross(w[i+1],Ic[i+1].dot(w[i+1]),axis=0)                                 # 6.50
+        R        = Ti[i,0:3,0:3].T                                                                        # ^i+1_i R
+        P        = Ti[i,0:3,3]                                                                            # ^i P_i+1
+        w[i+1]   = R.dot(w[i]) + Z * Qd[i+1]                                                                # 6.45
+        wd[i+1]  = R.dot(wd[i]) + np.cross(R.dot(w[i]),Z * Qd[i+1],axis=0) + Z * Qdd[i+1]                  # 6.46
+        vd[i+1]  = R.dot(np.cross(wd[i],P,axis=0) + np.cross(w[i],np.cross(w[i],P,axis=0),axis=0) + vd[i]) # 6.47
+        vcd[i+1] = np.cross(wd[i+1],np.array(Pc[i+1]).T,axis=0) + np.cross(w[i+1],np.cross(w[i+1],np.array(Pc[i+1]).T,axis=0),axis=0) + vd[i+1]          # 6.48
+        F[i+1]   = m[i+1]*vcd[i+1]                                                                          # 6.49
+        N[i+1]   = Ic[i+1].dot(wd[i+1]) + np.cross(w[i+1],Ic[i+1].dot(w[i+1]),axis=0)                       # 6.50
 
-        print("F1")
-        print(F[1])
-        print("N1")
-        print(N[1])
-        print("F2")
-        print(F[2])
-        print("N2")
-        print(N[2])
-
-    # for i in range(num,1,-1):
-    #     if i == num
-    #         f[i] = F[i]                                           # 6.51
-    #         n[i] = N[i] + np.cross(np.array(Pc[i]).T,F[i],axis=0) # 6.52
-    #     else
-    #         R = Ti{i}(1:3,1:3);
-    #         P = Ti{i}(1:3,4);
-    #         f{i} = R*f{i+1} + F{i}; % 6.51
-    #         n{i} = N{i} + R*n{i+1} + cross(Pc{i},F{i}) + cross(P,R*f{i+1}); % 6.52
-    #     Tau(i,1) = simplify( n{i}.'*Z ); % 6.53
+    for i in range(num,0,-1):
+        if i == num:
+            f[i] = F[i]                                           # 6.51
+            n[i] = N[i] + np.cross(np.array(Pc[i]).T,F[i],axis=0) # 6.52
+        else:
+            R = Ti[i,0:3,0:3]
+            P = Ti[i,0:3,3]    
+            f[i] = R.dot(f[i+1]) + F[i]  # 6.51
+            n[i] = N[i] + R.dot(n[i+1]) + np.cross(np.array(Pc[i]).T,F[i],axis=0) + np.cross(P,R.dot(f[i+1]),axis=0) # 6.52
+        Tau[i] = (n[i].T.dot(Z))[0,0] # 6.53
+    
+    return Tau[1:]
 
 def dynamics(a, alpha, d, theta):
-    _ , _, T_array = dh2tf(a,alpha,d,theta)
-    # T_array = np.array([[simplify(T_array[i][j]) for j in range(0,len(T_array[i]))] for i in range(0,len(T_array))])
-    # print(T_array[0][0][0])
-    for i in range(0,len(T_array)):
-        for j in range(0,len(T_array[i])):
-            for k in range(0,len(T_array[i][j])):
-                T_array[i][j][k]= simplify(T_array[i][j][k])
+    _ , T_array, _ = dh2tf(a,alpha,d,theta)
+
+    # for i in range(0,len(T_array)):
+        # for j in range(0,len(T_array[i])):
+            # for k in range(0,len(T_array[i][j])):
+                # T_array[i][j][k]= simplify(T_array[i][j][k])
+
     T_array = np.array(T_array)
 
     Q = symbols('q1 q2 q3')
@@ -130,8 +128,22 @@ def dynamics(a, alpha, d, theta):
     g = symbols('g')
     g0 = np.array([[0,0,-g]]).T
 
-    dynamics_newtonian(m, Pc, Ic, T_array, Qd, Qdd, g0)
+    Tau = dynamics_newtonian(m, Pc, Ic, T_array, Qd, Qdd, g0)
+    print(Tau[2])
 
+    return separate_mvg(Tau, Qdd, g)
+
+def separate_mvg(Tau, Qdd, g):
+    n = len(Tau)
+    M = [[0,0,0],[0,0,0],[0,0,0]]
+    G = [0,0,0]
+    V = [0,0,0]
+    for i in range(0,n):
+        for j in range(0,n):
+            M[i][j] = diff(Tau[i],Qdd[j])
+        G[i] = diff(Tau[i],g) * g
+        V[i] = Tau[i].subs([(qdd, 0) for qdd in Qdd] + [(g,0)])
+    return (M, V, G)
 
 if __name__ == "__main__":
     l1, l2, q1, q2, q3 = symbols('l1 l2 q1 q2 q3');
@@ -139,4 +151,6 @@ if __name__ == "__main__":
     alpha = (0, pi/2, 0, 0)
     d = (0, 0, 0, 0)
     theta = (q1, q2+pi/2, q3, 0)
-    dynamics(a, alpha, d, theta)
+    M, V, G = dynamics(a, alpha, d, theta)
+
+    # print(simplify(V[0]))
