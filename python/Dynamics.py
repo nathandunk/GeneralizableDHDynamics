@@ -1,5 +1,6 @@
 import numpy as np
 from sympy import *
+# from sympy.codegen.ast import Assignment
 # from math import pi
 
 def dh2tf(a, alpha, d, theta):
@@ -97,47 +98,55 @@ def dynamics(a, alpha, d, theta):
 
     T_array = np.array(T_array)
 
-    Q = symbols('q1 q2 q3')
-    
-    Qd = symbols('q1d q2d q3d')
-    
-    Qdd = symbols('q1dd q2dd q3dd')
-    
-    m = symbols('m1 m2 m3')
-    
-    Pc1 = symbols('Pc1x Pc1y Pc1z')
-    Pc2 = symbols('Pc2x Pc2y Pc2z')
-    Pc3 = symbols('Pc3x Pc3y Pc3z')
-    Pc = ([list(Pc1)], [list(Pc2)], [list(Pc3)])
+    ints = range(1,len(a)+1)
 
-    Ic1vars = symbols('Ic1xx Ic1xy Ic1xz Ic1yy Ic1yz Ic1zz')
-    Ic2vars = symbols('Ic2xx Ic2xy Ic2xz Ic2yy Ic2yz Ic2zz')
-    Ic3vars = symbols('Ic3xx Ic3xy Ic3xz Ic3yy Ic3yz Ic3zz')
-    Ic1 = np.array([[ Ic1vars[0], -Ic1vars[1], -Ic1vars[2]],
-                    [-Ic1vars[1],  Ic1vars[3], -Ic1vars[4]],
-                    [-Ic1vars[2], -Ic1vars[4],  Ic1vars[5]]])
-    Ic2 = np.array([[ Ic2vars[0], -Ic2vars[1], -Ic2vars[2]],
-                    [-Ic2vars[1],  Ic2vars[3], -Ic2vars[4]],
-                    [-Ic2vars[2], -Ic2vars[4],  Ic2vars[5]]])
-    Ic3 = np.array([[ Ic3vars[0], -Ic3vars[1], -Ic3vars[2]],
-                    [-Ic3vars[1],  Ic3vars[3], -Ic3vars[4]],
-                    [-Ic3vars[2], -Ic3vars[4],  Ic3vars[5]]])                    
+    Q = symbols([('q' + str(i) + ' ') for i in ints][:-1])
+
     
-    Ic = (Ic1, Ic2, Ic3)
+    Qd = symbols([('q' + str(i) + 'd ') for i in ints][:-1])
+    
+    Qdd = symbols([('q' + str(i) + 'dd ') for i in ints][:-1])
+    
+    m = symbols([('m' + str(i) + ' ') for i in ints][:-1])
+    
+    Pc = []
+    Ic = []
+    for i in range(1,len(a)+1):
+        Pci = symbols('Pc' + str(i) + 'x Pc' + str(i) + 'y Pc' + str(i) + 'z')
+        Pc.append([list(Pci)])
+
+        Icivars = symbols('Ic' + str(i) + 'xx Ic' + str(i) + 'xy Ic' + str(i) + 'xz Ic' + str(i) + 'yy Ic' + str(i) + 'yz Ic' + str(i) + 'zz')
+        Ic.append(np.array([[ Icivars[0], -Icivars[1], -Icivars[2]],
+                            [-Icivars[1],  Icivars[3], -Icivars[4]],
+                            [-Icivars[2], -Icivars[4],  Icivars[5]]]))
+    # Ic2vars = symbols('Ic2xx Ic2xy Ic2xz Ic2yy Ic2yz Ic2zz')
+    # Ic3vars = symbols('Ic3xx Ic3xy Ic3xz Ic3yy Ic3yz Ic3zz')
+        # Ic1 = np.array([[ Ic1vars[0], -Ic1vars[1], -Ic1vars[2]],
+    #                 [-Ic1vars[1],  Ic1vars[3], -Ic1vars[4]],
+    #                 [-Ic1vars[2], -Ic1vars[4],  Ic1vars[5]]])
+    # Ic2 = np.array([[ Ic2vars[0], -Ic2vars[1], -Ic2vars[2]],
+    #                 [-Ic2vars[1],  Ic2vars[3], -Ic2vars[4]],
+    #                 [-Ic2vars[2], -Ic2vars[4],  Ic2vars[5]]])
+    # Ic3 = np.array([[ Ic3vars[0], -Ic3vars[1], -Ic3vars[2]],
+    #                 [-Ic3vars[1],  Ic3vars[3], -Ic3vars[4]],
+    #                 [-Ic3vars[2], -Ic3vars[4],  Ic3vars[5]]])                    
+    
+    # Ic = (Ic1, Ic2, Ic3)
 
     g = symbols('g')
     g0 = np.array([[0,0,-g]]).T
 
     Tau = dynamics_newtonian(m, Pc, Ic, T_array, Qd, Qdd, g0)
+
     print(Tau[2])
 
     return separate_mvg(Tau, Qdd, g)
 
 def separate_mvg(Tau, Qdd, g):
     n = len(Tau)
-    M = [[0,0,0],[0,0,0],[0,0,0]]
-    G = [0,0,0]
-    V = [0,0,0]
+    M = [[0]*n]*n
+    G = [0]*n
+    V = [0]*n
     for i in range(0,n):
         for j in range(0,n):
             M[i][j] = diff(Tau[i],Qdd[j])
@@ -152,5 +161,3 @@ if __name__ == "__main__":
     d = (0, 0, 0, 0)
     theta = (q1, q2+pi/2, q3, 0)
     M, V, G = dynamics(a, alpha, d, theta)
-
-    # print(simplify(V[0]))
