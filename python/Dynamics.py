@@ -1,15 +1,12 @@
 import numpy as np
 from sympy import *
-# from sympy.codegen.ast import Assignment
-# from math import pi
+from sympy import codegen
 
 def dh2tf(a, alpha, d, theta):
     if not all(len(lst) == len(a) for lst in [alpha, d, theta]):
         print("Incorrect length of a, alpha, d, theta. Returning 0")
         return 0
     Ti  = []
-    T0i = []
-    T0N = np.eye(4)
 
     for i in range(0,len(a)):
         sinTheta = sin(theta[i]);
@@ -21,10 +18,8 @@ def dh2tf(a, alpha, d, theta):
                       [sinTheta*sinAlpha, cosTheta*sinAlpha,  cosAlpha,  cosAlpha*d[i]],
                       [              0.0,               0.0,       0.0,            1.0]])
         Ti.append(T)
-        T0N = T0N.dot(T)
-        T0i.append(T0N)
 
-    return T0N,Ti,T0i
+    return Ti
 
 def dynamics_newtonian(m,Pc,Ic,Ti,Qd,Qdd,g0):
     num = len(m)
@@ -89,12 +84,7 @@ def dynamics_newtonian(m,Pc,Ic,Ti,Qd,Qdd,g0):
     return Tau[1:]
 
 def dynamics(a, alpha, d, theta):
-    _ , T_array, _ = dh2tf(a,alpha,d,theta)
-
-    # for i in range(0,len(T_array)):
-        # for j in range(0,len(T_array[i])):
-            # for k in range(0,len(T_array[i][j])):
-                # T_array[i][j][k]= simplify(T_array[i][j][k])
+    T_array = dh2tf(a,alpha,d,theta)
 
     T_array = np.array(T_array)
 
@@ -102,7 +92,6 @@ def dynamics(a, alpha, d, theta):
 
     Q = symbols([('q' + str(i) + ' ') for i in ints][:-1])
 
-    
     Qd = symbols([('q' + str(i) + 'd ') for i in ints][:-1])
     
     Qdd = symbols([('q' + str(i) + 'dd ') for i in ints][:-1])
@@ -119,26 +108,11 @@ def dynamics(a, alpha, d, theta):
         Ic.append(np.array([[ Icivars[0], -Icivars[1], -Icivars[2]],
                             [-Icivars[1],  Icivars[3], -Icivars[4]],
                             [-Icivars[2], -Icivars[4],  Icivars[5]]]))
-    # Ic2vars = symbols('Ic2xx Ic2xy Ic2xz Ic2yy Ic2yz Ic2zz')
-    # Ic3vars = symbols('Ic3xx Ic3xy Ic3xz Ic3yy Ic3yz Ic3zz')
-        # Ic1 = np.array([[ Ic1vars[0], -Ic1vars[1], -Ic1vars[2]],
-    #                 [-Ic1vars[1],  Ic1vars[3], -Ic1vars[4]],
-    #                 [-Ic1vars[2], -Ic1vars[4],  Ic1vars[5]]])
-    # Ic2 = np.array([[ Ic2vars[0], -Ic2vars[1], -Ic2vars[2]],
-    #                 [-Ic2vars[1],  Ic2vars[3], -Ic2vars[4]],
-    #                 [-Ic2vars[2], -Ic2vars[4],  Ic2vars[5]]])
-    # Ic3 = np.array([[ Ic3vars[0], -Ic3vars[1], -Ic3vars[2]],
-    #                 [-Ic3vars[1],  Ic3vars[3], -Ic3vars[4]],
-    #                 [-Ic3vars[2], -Ic3vars[4],  Ic3vars[5]]])                    
-    
-    # Ic = (Ic1, Ic2, Ic3)
 
     g = symbols('g')
     g0 = np.array([[0,0,-g]]).T
 
     Tau = dynamics_newtonian(m, Pc, Ic, T_array, Qd, Qdd, g0)
-
-    print(Tau[2])
 
     return separate_mvg(Tau, Qdd, g)
 
@@ -154,6 +128,63 @@ def separate_mvg(Tau, Qdd, g):
         V[i] = Tau[i].subs([(qdd, 0) for qdd in Qdd] + [(g,0)])
     return (M, V, G)
 
+def WriteFiles(M, V, G):
+    num = len(V)
+
+    file_header = ["#pragma once\n\n",
+                  "#include <Mahi/Util.hpp>\n",
+                  "#include <Mahi/Robo.hpp>\n\n",
+                  "using namespace mahi::util;\n",
+                  "using namespace mahi::robo;\n\n"]
+
+    #Write M
+    Mh = open("M.h", "w")
+    M_func_setup = ["Eigen::MatrixXd get_M(const Eigen::VectorXd Qs){\n",
+                   "\t" + ' '.join(["double q" + str(i+1) + " = Qs(" + str(i) + ");" for i in range(0,num)]) + "\n\n",
+                   "\tEigen::VectorXd V = Eigen::MatrixXd::Zero(" + str(num) + "," + str(num) + "); \n\n"]
+
+    Mh.writelines(file_header + M_func_setup)
+
+    for i in range(0,num):
+        for j in range(0,num):
+            Mh.writelines("\t" + ccode(M[i][j],assign_to=("M[" + str(i) + "," + str(j) + "]")) + "\n")
+
+    Mh.writelines("\n\treturn M;\n}")
+    Mh.close()
+    
+    Mh.close()
+                   
+    #Write V
+    Vh = open("V.h", "w")
+    V_func_setup = ["Eigen::VectorXd get_V(const Eigen::VectorXd Qs, const Eigen::VectorXd Qds){\n",
+                   "\t" + ' '.join(["double q" + str(i+1) + " = Qs(" + str(i) + ");" for i in range(0,num)]) + "\n",
+                   "\t" + ' '.join(["double q" + str(i+1) + "d = Qds(" + str(i) + ");" for i in range(0,num)]) + "\n\n",
+                   "\tEigen::VectorXd V = Eigen::VectorXd::Zero(" + str(num) + "); \n\n"]
+
+    Vh.writelines(file_header + V_func_setup)
+
+    for i in range(0,num):
+        Vh.writelines("\t" + ccode(V[i],assign_to=("V[" + str(i) + "]")) + "\n")
+
+    Vh.writelines("\n\treturn V;\n}")
+    Vh.close()
+
+    #Write G
+    Gh = open("G.h", "w")
+    G_func_setup = ["Eigen::VectorXd get_G(const Eigen::VectorXd Qs){\n",
+                   "\t" + ' '.join(["double q" + str(i+1) + " = Qs(" + str(i) + ");" for i in range(0,num)]) + "\n\n",
+                   "\tEigen::VectorXd G = Eigen::VectorXd::Zero(" + str(num) + "); \n\n"]
+
+    Gh.writelines(file_header + G_func_setup)
+
+    for i in range(0,num):
+        Gh.writelines("\t" + ccode(G[i],assign_to=("G[" + str(i) + "]")) + "\n")
+
+    Gh.writelines("\n\treturn G;\n}")
+
+    Gh.close()
+
+
 if __name__ == "__main__":
     l1, l2, q1, q2, q3 = symbols('l1 l2 q1 q2 q3');
     a = (0, 0, l1, l2)
@@ -161,3 +192,5 @@ if __name__ == "__main__":
     d = (0, 0, 0, 0)
     theta = (q1, q2+pi/2, q3, 0)
     M, V, G = dynamics(a, alpha, d, theta)
+
+    WriteFiles(M,V,G)
